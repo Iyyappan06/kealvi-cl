@@ -9,12 +9,13 @@ export async function getQuestionsPage(offset: number, limit: number) {
 
   if (error) throw new Error(error.message);
 
-  const rows = (data ?? []).map((q) => ({
-    id: q.id,
-    body: q.body,
-    author: q.author,
-    votes: 0, // temporary until votes system is fixed
-  }));
+const rows = (data ?? []).map((q) => ({
+  id: String(q.id),
+  body: q.body,
+  author: q.author,
+  upvotes: 0,
+  downvotes: 0,
+}));
 
   const hasMore = rows.length === limit;
 
@@ -30,10 +31,10 @@ export async function searchQuestions(q: string, limit: number) {
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    body: row.body,
-    author: row.author,
-    votes: row.votes?.[0]?.count ?? 0,
-  }));
-}
+ return (data ?? []).map((row) => ({
+  id: String(row.id),
+  body: row.body,
+  author: row.author,
+  upvotes: row.votes?.[0]?.count ?? 0,
+  downvotes: 0,
+}));
