@@ -6,8 +6,8 @@ type Question = {
   id: string;
   body: string;
   author: string | null;
-  upvotes: number;
-  downvotes: number;
+  upvotes: number | string | null;
+  downvotes: number | string | null;
 };
 
 export default function QuestionsList({
@@ -23,25 +23,37 @@ export default function QuestionsList({
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
 
+  // ✅ vote tracking (one vote per type)
+  const [voted, setVoted] = useState<
+    Record<string, "up" | "down" | null>
+  >({});
+
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
 
-  // Debounced search: wait 300ms after typing stops; each keystroke cancels
-  // the previous timer, so "deploying" fires one request, not nine.
+  // safe number helper
+  function normalize(n: any) {
+    return Number(n ?? 0) || 0;
+  }
+
+  // SEARCH
   useEffect(() => {
     const id = setTimeout(async () => {
       const url = query
         ? `/api/questions?q=${encodeURIComponent(query)}`
         : `/api/questions`;
+
       const res = await fetch(url);
       const data = await res.json();
+
       setQuestions(data.questions);
       setHasMore(data.hasMore);
     }, 300);
 
-    return () => clearTimeout(id); // cancel the pending timer on each keystroke
+    return () => clearTimeout(id);
   }, [query]);
 
+  // CREATE QUESTION
   async function submit() {
     if (!draft.trim()) return;
 
@@ -50,53 +62,106 @@ export default function QuestionsList({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ body: draft }),
     });
+
     const created = await res.json();
 
-    setQuestions((qs) => [{ ...created, votes: 0 }, ...qs]);
+    setQuestions((qs) => [
+      {
+        ...created,
+        upvotes: 0,
+        downvotes: 0,
+      },
+      ...qs,
+    ]);
+
     setDraft("");
   }
 
+  // UPVOTE (ONE TIME ONLY)
   async function upvote(id: string) {
-  // optimistic UI update
-  setQuestions((qs) =>
-    qs.map((q) =>
-      q.id === id ? { ...q, upvotes: q.upvotes + 1 } : q
-    )
-  );
+    if (voted[id] === "up") return;
 
-  await fetch(`/api/questions/${id}/upvote`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ voterId: getVoterId() }),
-  });
-}
+    setVoted((prev) => ({ ...prev, [id]: "up" }));
 
-async function downvote(id: string) {
-  setQuestions((qs) =>
-    qs.map((q) =>
-      q.id === id ? { ...q, downvotes: q.downvotes + 1 } : q
-    )
-  );
+    setQuestions((qs) =>
+      qs.map((q) =>
+        q.id === id
+          ? { ...q, upvotes: normalize(q.upvotes) + 1 }
+          : q
+      )
+    );
 
-  await fetch(`/api/questions/${id}/downvote`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ voterId: getVoterId() }),
-  });
-}
+    const res = await fetch(`/api/questions/${id}/upvote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voterId: getVoterId() }),
+    });
 
+    if (!res.ok) {
+      setVoted((prev) => ({ ...prev, [id]: null }));
+
+      setQuestions((qs) =>
+        qs.map((q) =>
+          q.id === id
+            ? { ...q, upvotes: normalize(q.upvotes) - 1 }
+            : q
+        )
+      );
+    }
+  }
+
+  // DOWNVOTE (ONE TIME ONLY)
+  async function downvote(id: string) {
+    if (voted[id] === "down") return;
+
+    setVoted((prev) => ({ ...prev, [id]: "down" }));
+
+    setQuestions((qs) =>
+      qs.map((q) =>
+        q.id === id
+          ? { ...q, downvotes: normalize(q.downvotes) + 1 }
+          : q
+      )
+    );
+
+    const res = await fetch(`/api/questions/${id}/downvote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voterId: getVoterId() }),
+    });
+
+    if (!res.ok) {
+      setVoted((prev) => ({ ...prev, [id]: null }));
+
+      setQuestions((qs) =>
+        qs.map((q) =>
+          q.id === id
+            ? { ...q, downvotes: normalize(q.downvotes) - 1 }
+            : q
+        )
+      );
+    }
+  }
+
+  // LOAD MORE
   async function loadMore() {
     setLoading(true);
-    const res = await fetch(`/api/questions?offset=${questions.length}`);
+
+    const res = await fetch(
+      `/api/questions?offset=${questions.length}`
+    );
+
     const data = await res.json();
+
     setQuestions((qs) => [...qs, ...data.questions]);
     setHasMore(data.hasMore);
+
     setLoading(false);
   }
 
   return (
     <div className="space-y-5">
-      {/* Ask box */}
+      {/* ASK BOX */}
       <div className="rounded-2xl border bg-surface p-4 shadow-sm">
         <div className="flex gap-2">
           <input
@@ -108,14 +173,14 @@ async function downvote(id: string) {
           />
           <button
             onClick={submit}
-            className="rounded-xl bg-brand px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong"
+            className="rounded-xl bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-strong"
           >
             Ask
           </button>
         </div>
       </div>
 
-      {/* Search + hydration status */}
+      {/* SEARCH */}
       <div className="flex items-center gap-3">
         <input
           value={query}
@@ -123,42 +188,54 @@ async function downvote(id: string) {
           placeholder="Search questions…"
           className="w-full flex-1 rounded-xl border bg-surface px-4 py-2.5 text-sm outline-none placeholder:text-muted focus:border-brand"
         />
-        <span className="shrink-0 text-xs text-muted">
-          {hydrated ? "Interactive ✓" : "Loading interactivity…"}
+        <span className="text-xs text-muted">
+          {hydrated ? "Interactive ✓" : "Loading…"}
         </span>
       </div>
 
-      {/* Questions */}
+      {/* QUESTIONS */}
       <ul className="space-y-3">
         {questions.map((q) => (
           <li
-              key={q.id}
-              className="flex items-start gap-3 border border-indigo-100 bg-indigo-50/40 p-4 rounded-2xl shadow-sm hover:shadow-md transition"
-    >
-            <div className="flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-indigo-100 bg-white/80 px-3 py-2">
+            key={q.id}
+            className="flex items-start gap-3 border border-indigo-100 bg-indigo-50/40 p-4 rounded-2xl shadow-sm hover:shadow-md transition"
+          >
+            {/* VOTE BOX */}
+            <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-indigo-100 bg-white/80 px-3 py-2">
 
-  {/* Upvote */}
-  <button
-    onClick={() => upvote(q.id)}
-    className="text-indigo-600 hover:text-indigo-800 text-xs leading-none"
-  >
-    ▲
-  </button>
+              {/* UP */}
+              <button
+                onClick={() => upvote(q.id)}
+                disabled={voted[q.id] === "up"}
+                className={`text-xs leading-none ${
+                  voted[q.id] === "up"
+                    ? "text-indigo-900 font-bold"
+                    : "text-indigo-600"
+                }`}
+              >
+                ▲
+              </button>
 
-  {/* Score */}
-  <span className="text-sm font-bold text-gray-800 tabular-nums leading-none">
-  {(q.upvotes ?? 0) - (q.downvotes ?? 0)}
-</span>
+              {/* SCORE */}
+              <span className="text-sm font-bold text-gray-800 tabular-nums leading-none">
+                {normalize(q.upvotes) - normalize(q.downvotes)}
+              </span>
 
-  {/* Downvote */}
-  <button
-    onClick={() => downvote(q.id)}
-    className="text-red-500 hover:text-red-700 text-xs leading-none"
-  >
-    ▼
-  </button>
+              {/* DOWN */}
+              <button
+                onClick={() => downvote(q.id)}
+                disabled={voted[q.id] === "down"}
+                className={`text-xs leading-none ${
+                  voted[q.id] === "down"
+                    ? "text-red-900 font-bold"
+                    : "text-red-500"
+                }`}
+              >
+                ▼
+              </button>
+            </div>
 
-</div>
+            {/* QUESTION */}
             <div className="min-w-0 flex-1 pt-0.5">
               <p className="leading-snug">{q.body}</p>
               {q.author && (
@@ -169,18 +246,20 @@ async function downvote(id: string) {
         ))}
       </ul>
 
+      {/* EMPTY */}
       {questions.length === 0 && (
         <p className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted">
           No questions yet — be the first to ask.
         </p>
       )}
 
+      {/* LOAD MORE */}
       {hasMore && (
         <div className="flex justify-center">
           <button
             onClick={loadMore}
             disabled={loading}
-            className="rounded-xl border bg-surface px-5 py-2.5 text-sm font-medium transition-colors hover:border-brand hover:text-brand disabled:opacity-50"
+            className="rounded-xl border bg-surface px-5 py-2.5 text-sm font-medium hover:border-brand hover:text-brand disabled:opacity-50"
           >
             {loading ? "Loading…" : "Load more"}
           </button>

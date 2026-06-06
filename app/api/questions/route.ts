@@ -38,8 +38,8 @@ async function attachVotes(questions: any[]) {
 
       return {
         ...q,
-        upvotes: upvotes ?? 0,
-        downvotes: downvotes ?? 0,
+        upvotes: Number(upvotes ?? 0),
+        downvotes: Number(downvotes ?? 0),
       };
     })
   );
