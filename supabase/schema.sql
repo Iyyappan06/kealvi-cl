@@ -27,7 +27,17 @@ create table votes (
   unique (question_id, voter_id)
 );
 
-create index votes_question_id_idx on votes (question_id);
+create index votes_question_id_idx on votes (question_id);  
+
+create table downvotes (
+  id           uuid primary key default gen_random_uuid(),
+  question_id  uuid not null references questions(id) on delete cascade,
+  voter_id     text not null,
+  created_at   timestamptz default now(),
+  unique (question_id, voter_id)
+);
+
+create index idx_downvotes_question_id on downvotes(question_id);
 
 -- ── full-text search index (Feature 5) ───────────────────────────────────────
 -- GIN = Generalized INverted index: the word → documents map behind search.

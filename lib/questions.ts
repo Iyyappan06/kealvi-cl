@@ -3,9 +3,9 @@ import { supabase } from "@/lib/supabase";
 export async function getQuestionsPage(offset: number, limit: number) {
   const { data, error } = await supabase
     .from("questions")
-    .select("id, body, author, created_at, votes(count)")
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit); // inclusive → asks for limit + 1 rows
+    .select("*");
+
+  console.log({ data, error });
 
   if (error) throw new Error(error.message);
 
@@ -13,11 +13,12 @@ export async function getQuestionsPage(offset: number, limit: number) {
     id: q.id,
     body: q.body,
     author: q.author,
-    votes: q.votes?.[0]?.count ?? 0,
+    votes: 0, // temporary until votes system is fixed
   }));
 
-  const hasMore = rows.length > limit; // got the extra row? there's a next page
-  return { questions: rows.slice(0, limit), hasMore };
+  const hasMore = rows.length === limit;
+
+  return { questions: rows, hasMore };
 }
 
 export async function searchQuestions(q: string, limit: number) {

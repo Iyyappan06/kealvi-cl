@@ -6,7 +6,8 @@ type Question = {
   id: string;
   body: string;
   author: string | null;
-  votes: number;
+  upvotes: number;
+  downvotes: number;
 };
 
 export default function QuestionsList({
@@ -56,24 +57,33 @@ export default function QuestionsList({
   }
 
   async function upvote(id: string) {
-    // optimistic: assume success, update the UI now
-    setQuestions((qs) =>
-      qs.map((q) => (q.id === id ? { ...q, votes: q.votes + 1 } : q))
-    );
+  // optimistic UI update
+  setQuestions((qs) =>
+    qs.map((q) =>
+      q.id === id ? { ...q, upvotes: q.upvotes + 1 } : q
+    )
+  );
 
-    const res = await fetch(`/api/questions/${id}/vote`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voterId: getVoterId() }),
-    });
+  await fetch(`/api/questions/${id}/upvote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ voterId: getVoterId() }),
+  });
+}
 
-    // server said no (already voted) — roll back
-    if (!res.ok) {
-      setQuestions((qs) =>
-        qs.map((q) => (q.id === id ? { ...q, votes: q.votes - 1 } : q))
-      );
-    }
-  }
+async function downvote(id: string) {
+  setQuestions((qs) =>
+    qs.map((q) =>
+      q.id === id ? { ...q, downvotes: q.downvotes + 1 } : q
+    )
+  );
+
+  await fetch(`/api/questions/${id}/downvote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ voterId: getVoterId() }),
+  });
+}
 
   async function loadMore() {
     setLoading(true);
@@ -122,18 +132,33 @@ export default function QuestionsList({
       <ul className="space-y-3">
         {questions.map((q) => (
           <li
-            key={q.id}
-            className="flex items-start gap-3 rounded-2xl border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md"
-          >
-            <button
-              onClick={() => upvote(q.id)}
-              className="flex shrink-0 flex-col items-center gap-0.5 rounded-xl border px-3.5 py-2 text-brand transition-colors hover:border-brand hover:bg-brand-soft"
-            >
-              <span className="text-xs leading-none">▲</span>
-              <span className="text-sm font-semibold leading-none tabular-nums">
-                {q.votes}
-              </span>
-            </button>
+              key={q.id}
+              className="flex items-start gap-3 border border-indigo-100 bg-indigo-50/40 p-4 rounded-2xl shadow-sm hover:shadow-md transition"
+    >
+            <div className="flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-indigo-100 bg-white/80 px-3 py-2">
+
+  {/* Upvote */}
+  <button
+    onClick={() => upvote(q.id)}
+    className="text-indigo-600 hover:text-indigo-800 text-xs leading-none"
+  >
+    ▲
+  </button>
+
+  {/* Score */}
+  <span className="text-sm font-bold text-gray-800 tabular-nums leading-none">
+  {(q.upvotes ?? 0) - (q.downvotes ?? 0)}
+</span>
+
+  {/* Downvote */}
+  <button
+    onClick={() => downvote(q.id)}
+    className="text-red-500 hover:text-red-700 text-xs leading-none"
+  >
+    ▼
+  </button>
+
+</div>
             <div className="min-w-0 flex-1 pt-0.5">
               <p className="leading-snug">{q.body}</p>
               {q.author && (
