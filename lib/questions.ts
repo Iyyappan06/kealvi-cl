@@ -38,3 +38,4 @@ export async function searchQuestions(q: string, limit: number) {
   upvotes: row.votes?.[0]?.count ?? 0,
   downvotes: 0,
 }));
+}
