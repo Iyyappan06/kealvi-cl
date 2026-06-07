@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import { getVoterId } from "@/lib/voter";
 
@@ -23,15 +24,21 @@ export default function QuestionsList({
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
 
-  // ✅ vote tracking (one vote per type)
+  // vote tracking
   const [voted, setVoted] = useState<
     Record<string, "up" | "down" | null>
   >({});
 
+  // AI answers
+  const [aiAnswers, setAiAnswers] = useState<Record<string, string>>({});
+  const [loadingAnswer, setLoadingAnswer] = useState<
+    Record<string, boolean>
+  >({});
+
   const [hydrated, setHydrated] = useState(false);
+
   useEffect(() => setHydrated(true), []);
 
-  // safe number helper
   function normalize(n: any) {
     return Number(n ?? 0) || 0;
   }
@@ -77,7 +84,46 @@ export default function QuestionsList({
     setDraft("");
   }
 
-  // UPVOTE (ONE TIME ONLY)
+  // AI ANSWER
+  async function getAiAnswer(id: string, question: string) {
+    setLoadingAnswer((prev) => ({
+      ...prev,
+      [id]: true,
+    }));
+
+    try {
+      const res = await fetch("/api/ai/answer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question,
+        }),
+      });
+
+      const data = await res.json();
+
+      setAiAnswers((prev) => ({
+        ...prev,
+        [id]: data.answer,
+      }));
+    } catch (error) {
+      console.error("AI Answer Error:", error);
+
+      setAiAnswers((prev) => ({
+        ...prev,
+        [id]: "Failed to generate answer.",
+      }));
+    } finally {
+      setLoadingAnswer((prev) => ({
+        ...prev,
+        [id]: false,
+      }));
+    }
+  }
+
+  // UPVOTE
   async function upvote(id: string) {
     if (voted[id] === "up") return;
 
@@ -110,7 +156,7 @@ export default function QuestionsList({
     }
   }
 
-  // DOWNVOTE (ONE TIME ONLY)
+  // DOWNVOTE
   async function downvote(id: string) {
     if (voted[id] === "down") return;
 
@@ -202,8 +248,6 @@ export default function QuestionsList({
           >
             {/* VOTE BOX */}
             <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-indigo-100 bg-white/80 px-3 py-2">
-
-              {/* UP */}
               <button
                 onClick={() => upvote(q.id)}
                 disabled={voted[q.id] === "up"}
@@ -216,12 +260,10 @@ export default function QuestionsList({
                 ▲
               </button>
 
-              {/* SCORE */}
               <span className="text-sm font-bold text-gray-800 tabular-nums leading-none">
                 {normalize(q.upvotes) - normalize(q.downvotes)}
               </span>
 
-              {/* DOWN */}
               <button
                 onClick={() => downvote(q.id)}
                 disabled={voted[q.id] === "down"}
@@ -238,8 +280,32 @@ export default function QuestionsList({
             {/* QUESTION */}
             <div className="min-w-0 flex-1 pt-0.5">
               <p className="leading-snug">{q.body}</p>
+
               {q.author && (
-                <p className="mt-1.5 text-xs text-muted">{q.author}</p>
+                <p className="mt-1.5 text-xs text-muted">
+                  {q.author}
+                </p>
+              )}
+
+              <button
+                onClick={() => getAiAnswer(q.id, q.body)}
+                disabled={loadingAnswer[q.id]}
+                className="mt-3 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {loadingAnswer[q.id]
+                  ? "Generating..."
+                  : "Answer with AI"}
+              </button>
+
+              {aiAnswers[q.id] && (
+                <div className="mt-3 rounded-xl border bg-white p-3">
+                  <p className="mb-1 text-sm font-semibold">
+                    Gemini AI Answer
+                  </p>
+                  <p className="text-sm whitespace-pre-wrap">
+                    {aiAnswers[q.id]}
+                  </p>
+                </div>
               )}
             </div>
           </li>
