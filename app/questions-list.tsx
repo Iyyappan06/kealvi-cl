@@ -83,45 +83,56 @@ export default function QuestionsList({
 
     setDraft("");
   }
+  
+// AI ANSWER
+async function getAiAnswer(id: string, question: string) {
+  setLoadingAnswer((prev) => ({
+    ...prev,
+    [id]: true,
+  }));
 
-  // AI ANSWER
-  async function getAiAnswer(id: string, question: string) {
+  try {
+    const res = await fetch("/api/ai/answer", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        question,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setAiAnswers((prev) => ({
+        ...prev,
+        [id]:
+          data.error ||
+          "Failed to generate answer. Please try again later.",
+      }));
+      return;
+    }
+
+    setAiAnswers((prev) => ({
+      ...prev,
+      [id]: data.answer,
+    }));
+  } catch (error) {
+    console.error("AI Answer Error:", error);
+
+    setAiAnswers((prev) => ({
+      ...prev,
+      [id]:
+        "Unable to connect to the AI service. Please try again later.",
+    }));
+  } finally {
     setLoadingAnswer((prev) => ({
       ...prev,
-      [id]: true,
+      [id]: false,
     }));
-
-    try {
-      const res = await fetch("/api/ai/answer", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          question,
-        }),
-      });
-
-      const data = await res.json();
-
-      setAiAnswers((prev) => ({
-        ...prev,
-        [id]: data.answer,
-      }));
-    } catch (error) {
-      console.error("AI Answer Error:", error);
-
-      setAiAnswers((prev) => ({
-        ...prev,
-        [id]: "Failed to generate answer.",
-      }));
-    } finally {
-      setLoadingAnswer((prev) => ({
-        ...prev,
-        [id]: false,
-      }));
-    }
   }
+}
 
   // UPVOTE
   async function upvote(id: string) {
